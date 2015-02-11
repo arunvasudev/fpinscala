@@ -83,6 +83,56 @@ trait Stream[+A] {
     def append[B >: A](str: => Stream[B]): Stream[B] = foldRight(str)((a, accum) => cons(a, accum))
 
     def flatMap[B](f: A => Stream[B]): Stream[B] = foldRight(empty[B])((a, accum) => f(a).append(accum))
+
+    def mapThruUnfold[B](f: A => B): Stream[B] = {
+        def mapHelper(str: Stream[A]): Option[(B, Stream[A])] = str match {
+            case Cons(h, t) => Some((f(h()), t()))
+            case Empty => None
+        }
+
+        unfold(this)(mapHelper)
+    }
+
+    def takeThruUnfold(n: Int): Stream[A] = {
+        def takeHelper(state: (Int, Stream[A])): Option[(A, (Int, Stream[A]))] = state match { case (n, str) =>
+            if (n <= 0) None
+            else {
+                str match {
+                    case Cons(h, t) => Some((h(), (n - 1, t())))
+                    case Empty => None
+                }
+            }
+        }
+
+        unfold((n, this))(takeHelper)
+    }
+
+    def takeWhileThruUnfold(f: A => Boolean): Stream[A] = {
+        def takeWhileHelper(str: Stream[A]): Option[(A, Stream[A])] = str match {
+            case Cons(h, t) if f(h()) => Option((h(), t()))
+            case _ => None
+        }
+
+        unfold(this)(takeWhileHelper)
+    }
+
+    def zipWithThruUnfold[B, C](strB: Stream[B])(f: (A, B) => C): Stream[C] = {
+        def zipWithHelper(p: (Stream[A], Stream[B])): Option[(C, (Stream[A], Stream[B]))] = p match {
+            case (Cons(h1, t1), Cons(h2, t2)) => Some((f(h1(), h2()), (t1(), t2())))
+            case _ => None
+        }
+
+        unfold((this, strB))(zipWithHelper)
+    }
+
+    def zipAllThruUnfold[B](strB: Stream[B]): Stream[(A, B)] = {
+        def zipAllHelper(p: (Stream[A], Stream[B])): Option[((A, B), (Stream[A], Stream[B]))] = p match {
+            case (Cons(h1, t1), Cons(h2, t2)) => Some(((h1(), h2()), (t1(), t2())))
+            case _ => None
+        }
+
+        unfold((this, strB))(zipAllHelper)
+    }
 }
 
 case object Empty extends Stream[Nothing] {
@@ -106,4 +156,44 @@ object Stream {
     def apply[A](as: A*): Stream[A] = {
         if (as.isEmpty) empty else cons(as.head, apply(as.tail:_*))
     }
+
+    def constant[A](a: A): Stream[A] = {
+        lazy val cs:Stream[A] = cons(a, cs) 
+        return cs
+    }
+
+    def from(n: Int): Stream[Int] = cons(n, from(n + 1))
+
+    def fibs:Stream[Int] = {
+        def fibsHelper(a: Int, b: Int): Stream[Int] = cons(a, fibsHelper(b, a+b))
+        fibsHelper(1,1)
+    }
+
+    def unfold[A, S](z: S)(f: S => Option[(A, S)]) : Stream[A] = {
+        val next = f(z)
+        next match {
+            case None => empty[A]
+            case Some((a, s)) => cons(a, unfold(s)(f))
+        }
+    }
+
+    def constant2[A](a: A): Stream[A] = {
+        def nextConst[A](a: A): Option[(A, A)] = Some((a, a))
+        unfold(a)(nextConst)
+    }
+
+    def from2(n: Int): Stream[Int] = {
+        def nextInt(n1: Int): Option[(Int, Int)] = Some((n1, n1+1))
+        unfold(n)(nextInt)
+    }
+
+    def fibs2: Stream[Int] = {
+        def nextFib(p: (Int, Int)): Option[(Int, (Int, Int))] = p match {
+            case (a, b) => Some((a, (b, a+b)))
+        }
+
+        unfold((1,1))(nextFib)
+    }
+
+    def ones2: Stream[Int] = constant2(1)
 }
